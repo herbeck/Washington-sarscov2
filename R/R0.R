@@ -2,7 +2,8 @@ invisible('
 Compute R0 from parameter posteriors
 ') 
 
-X <- readRDS( 'combinedLog.rds' )
+X <- readRDS('~/Dropbox/SARS-CoV-2/Washington-sarscov2/beast/combinedLog.rds')
+#X <- readRDS( 'combinedLog.rds' )
 gamma1 = 96
 tau = 74
 ph = 0.20
@@ -13,25 +14,6 @@ Rs = b2R( X$seir.b )
 
 print( summary( Rs ))
 print( quantile( Rs  ,  c(.025, .975) )  )
-
-invisible(
-'
-ph 20pc: 
-   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-  1.463   1.644   1.846   1.986   2.217   5.447 
-    2.5%    97.5% 
-1.482970 3.146523 
-
-
-> print( summary( Rs ))
-   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-  1.018   1.144   1.285   1.382   1.543   3.791 
-> print( quantile( Rs  ,  c(.025, .975) )  )
-    2.5%    97.5% 
-1.032099 2.189878 
-
-'
-)
 
 if (FALSE)
 { # run interactively : 

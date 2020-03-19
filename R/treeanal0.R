@@ -4,9 +4,14 @@ invisible('
         - ggtree, colour code weifang, revise tip names, node errbars, time axis
 - densitree 
 ' )
+
 library( ape ) 
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  +     install.packages("BiocManager")
+BiocManager::install("ggtree")
 library( ggtree ) 
 
+data_dir <- "~/Dropbox/SARS-CoV-2/data"
 
 
 fix_tiplab <- function(x){
@@ -19,9 +24,10 @@ fix_tiplab <- function(x){
 #~ densitree
 if (FALSE)
 {
-tres <- read.nexus ( 'seir.trees'  )
+tres <- read.nexus ( file.path(data_dir,'alignment.trees')  )
 tres <- sample( tres, size = 200, replace=FALSE)
 
+#file.path(data_dir,'filename')
 
 tres <- lapply( tres, fix_tiplab )
 dtre <- ggdensitree(tres, alpha=.2, colour='steelblue') +  geom_tiplab(size=3) + theme_tree2() 

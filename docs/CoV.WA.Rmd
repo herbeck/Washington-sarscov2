@@ -1,0 +1,179 @@
+---
+title: "Phylodynamic analysis of a COVID19 outbreak in Washington state"
+author: "Josh Herbeck, modified from an original by Erik Volz"
+date: "3/11/2020"
+output: html_document
+---
+
+```{r knitr.setup, eval=TRUE, echo=FALSE}
+knitr::opts_chunk$set(echo=TRUE, message=FALSE, warning=FALSE, fig.width=6, fig.height=6)
+```
+
+This analysis was originally written by Erik Volz (I cloned his https://github.com/emvolz/weifang-sarscov2 repository). I haved edited it so the anlaysis is of the 21 available WA SARS-CoV-2 sequences (as of March 10), not Weifang SARS-CoV-2 sequences. I also added more detail, and tried to make the process of modifying the GISAID fasta file so that it can be used directly.
+
+## Preliminary phylogenetic analysis
+
+### Load the R packages
+```{r setup}
+library( ape ) 
+library( lubridate ) 
+library( treedater )
+```
+
+### Set the data directory and load the data
+
+SARS-CoV-19 genomes are retrieved from: https://gisaid.org/CoV2020 
+
+"Via the Nextstrain genome alignment pipeline, remove the first 130 sites, the last 50 sites, and site 18529 from the alignment."
+
+```{r sequences}
+data_dir <- "~/Dropbox/SARS-CoV-2/data"
+
+d <- read.dna(file.path(data_dir,'gisaid.March18.alignment.edited.fasta'), format = 'fasta')
+raw <- dist.dna( d, model = 'raw' ) 
+hky <- dist.dna( d, model = 'f84' )
+
+#Editing taxon names from GISAID format
+row.names(d) <- gsub("hCoV-19/","", rownames(d))
+row.names(d) <- gsub("\\|","_", rownames(d))
+
+#Take row.names(d) and pull out the dates, converting them to decimal
+.d <- sapply( strsplit( row.names(d), '_' ), function(x) (x[length(x)] ) )
+.d <- as.Date(.d)
+.d <- decimal_date(.d) #Vector of decimal dates from end of taxon labels
+
+#Estimates the average number of pairwise nucleotide differences found in the alignment
+.raw <- as.matrix( raw )
+diag(.raw) <- NA 
+print( mean( na.omit(as.vector(  .raw )) ) * 29726 ) 
+#Erik had 29855 here; my alignment is a bit shorter so I use 29726 nucleotides.
+#3.27 was Erik's first estimate from the Weifang alignment.
+#This will get larger with more sequences as the epidemic progresses, obvs.
+```
+
+```{r}
+prep_tip_labels_phydyn(file.path(data_dir,'gisaid.March18.alignment.edited.fasta')
+   , regexprs = c( '.*/WA/.*', '.*/WA/.*' ) 
+	 , invert_regexpr = c( FALSE, TRUE )
+	 , demes = c( 'Il'  , 'exog'  )
+	 , path_to_save = file.path(data_dir,'outputAlignmentforBEAST.fasta') 
+	)
+```
+
+###Load the ML tree
+```{r}
+tr <- read.tree(file.path(data_dir,'gisaid.March18.alignment.edited_RAxML_Tree.newick'))
+length(tr$tip.label)
+
+#These next lines edit the tip labels (taxa names) but might be unnecessary given later scripts.
+tr$tip.label <- gsub("hCoV-19/","", tr$tip.label)
+tr$tip.label <- gsub("\\|","_", tr$tip.label)
+```
+
+We use the treedater R package. This takes the following inputs:
+  ```dater(tree, sts, s)```
+  where 
+* `tree` is an `ape::phylo` phylogeny object, 
+* `sts` is a vector of sample times for each tip in `tree` formatted as fractions of the calendar year (e.g. 2010.1235)
+* `s` is the length of the genetic sequences used to estimate `tree`
+
+### Create the sts vector for treedater
+```{r sts}
+sts <- sapply( strsplit( tr$tip.label, '_' ), function(x) (x[length(x)] ) )
+sts <- as.Date(sts)
+sts <- decimal_date(sts)
+names(sts) <- tr$tip.label
+```
+
+### Run treedater
+```{r treedater, message=FALSE}
+td <- dater( tr, sts, s = 29289 , searchRoot = 10, temporalConstraints=TRUE,
+             meanRateLimits = c(.0007, .0015) )
+```
+
+Treedater estimated tMRCA (time to most recent common ancestor) is ```365*td$timeToMRCA``` days, and the date of common ancestor as ```date_decimal(td[[4]])```.
+
+### Plot tree
+Washington sequences tip labels are in red font.
+```{r}
+length(grep("WA", tr$tip.label))
+tipcol <- rep('black', length(tr$tip.label))
+WA.tips <- c("WA")
+colorsList <- c("red")
+for(i in 1:length(WA.tips)){tipcol[grep(WA.tips[i], tr$tip.label)] <- colorsList[i]}
+#plot(tr, no.mar=T, tip.color = tipcol, cex=0.3)
+plot( td, no.mar=T, cex = .33 )
+```
+
+### Plot root to trip regression
+```{r}
+rootToTipRegressionPlot(td, main="Root to tip regression", bty='n')
+legend("topleft", 
+       legend = c("internal nodes", "sample"), 
+       col=c("black", "red"),
+       pch=c(1,1),
+       bty='n')
+```
+
+### Identify outliers
+```{r}
+outliers <- outlierTips( td ) 
+```
+
+```{r eval=FALSE}
+ot0 = outlierTips( td ) 
+
+dd <- read.dna(file.path(data_dir,'gisaid.March18.alignment.edited.fasta'), format = 'fasta')
+toremove <- c( 'Wuhan_HBCDC-HB-01_2019_2019.99452054795_exog', 'USA_CA1_2020_2020.06010928962_exog' )
+dd <- dd[ setdiff( rownames(dd), toremove ), ]
+write.dna(dd,  'algn.21.2.fasta', format = 'fasta' )
+```
+
+##BEAST phylodynamic analysis
+
+Install BEAST2 from here: https://www.beast2.org/
+
+###BEAST input files
+
+https://github.com/mrc-ide/PhyDyn/wiki/Structured-Tree-Likelihood#population-structure
+"Population structure is introduced by mapping tip nodes to deme names. This can be done by annotating the corresponding tree taxa ids with deme information or by introducing an extra type trait. With the former, taxa ids must be suffixed with an underscore followed by the deme information. For example, a tree tip annotated with taxon
+
+  "EBOV|G4973.1|KR105286|SLE|x|2014-08-12_I"  
+  
+will be associated to deme I." 
+
+In BEAUti:
+  load the alignment
+  assign tip dates
+  choose the HKY+G substitution model and the strict clock model.
+
+Useful template for implementing the SEI(J)R runs: https://github.com/mrc-ide/PhyDyn/wiki/SEIR-Template
+
+https://beast.community/online_inference
+
+
+###Processing of BEAST output files
+
+Trees:
+
+```{r}
+
+library(babette)
+
+#output <- bbt_run(file.path(data_dir,'alignment.March14.fasta'))
+
+alignment.trees <- phytools::as.multiPhylo(file.path(data_dir,'alignment_trees'))
+plot_densitree(
+  file.path(data_dir,'alignment_trees'),
+  alpha = 0.01,
+  consensus = as.character(c(1:4)),
+  cex = 2.0,
+  scaleX = TRUE,
+  scale.bar = FALSE
+)
+```
+
+
+R0 estimation:
+
+combineLogs0.R -> combinedLog.rds ->R0.R

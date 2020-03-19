@@ -4,8 +4,15 @@ for Weifang sequences: 21.fasta
 ') 
 library( ape ) 
 library( seqinr )
-dshandong <- read.fasta( '21.fas' )
-d = read.fasta( 'algn.21.0.fasta')
+
+data_dir <- "~/Dropbox/SARS-CoV-2/data"
+
+d <- read.dna(file.path(data_dir,'alignment.March14.fasta'), format = 'fasta')
+
+#Why 'dshandong'?
+dshandong <- read.fasta(file.path(data_dir,'alignment.March14.fasta'))
+#dshandong <- read.fasta( 'alignment.fasta' )
+d = read.fasta( 'algn.21.0.fasta') 
 drop <- 'EP402125' 
 #~ keep <- sapply( strsplit( read.tree( 'a5alltrees1.nwk' )$tip.label , split='_' ), function(x) x[[1]] )
 keep <- paste0( read.tree( 'a5alltrees1.nwk' )$tip.label, '_Il' )
