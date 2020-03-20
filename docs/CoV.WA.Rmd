@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo=TRUE, message=FALSE, warning=FALSE, fig.width=6, fig.height=6)
 ```
 
-This analysis was originally written by Erik Volz (I cloned his https://github.com/emvolz/weifang-sarscov2 repository). I haved edited it so the anlaysis is of the 21 available WA SARS-CoV-2 sequences (as of March 10), not Weifang SARS-CoV-2 sequences. I also added more detail, and tried to make the process of modifying the GISAID fasta file so that it can be used directly.
+This analysis was originally written by Erik Volz (I cloned his https://github.com/emvolz/weifang-sarscov2 repository). I haved edited it so the anlaysis is of the X available WA SARS-CoV-2 sequences (as of date Y), not Weifang SARS-CoV-2 sequences. 
 
 ## Preliminary phylogenetic analysis
 
@@ -18,6 +18,7 @@ This analysis was originally written by Erik Volz (I cloned his https://github.c
 library( ape ) 
 library( lubridate ) 
 library( treedater )
+#library( ips )
 ```
 
 ### Set the data directory and load the data
@@ -30,44 +31,43 @@ SARS-CoV-19 genomes are retrieved from: https://gisaid.org/CoV2020
 data_dir <- "~/Dropbox/SARS-CoV-2/data"
 
 d <- read.dna(file.path(data_dir,'gisaid.March18.alignment.edited.fasta'), format = 'fasta')
-raw <- dist.dna( d, model = 'raw' ) 
-hky <- dist.dna( d, model = 'f84' )
 
 #Editing taxon names from GISAID format
-row.names(d) <- gsub("hCoV-19/","", rownames(d))
-row.names(d) <- gsub("\\|","_", rownames(d))
-
-#Take row.names(d) and pull out the dates, converting them to decimal
-.d <- sapply( strsplit( row.names(d), '_' ), function(x) (x[length(x)] ) )
-.d <- as.Date(.d)
-.d <- decimal_date(.d) #Vector of decimal dates from end of taxon labels
-
-#Estimates the average number of pairwise nucleotide differences found in the alignment
-.raw <- as.matrix( raw )
-diag(.raw) <- NA 
-print( mean( na.omit(as.vector(  .raw )) ) * 29726 ) 
-#Erik had 29855 here; my alignment is a bit shorter so I use 29726 nucleotides.
-#3.27 was Erik's first estimate from the Weifang alignment.
-#This will get larger with more sequences as the epidemic progresses, obvs.
-```
-
-```{r}
+#Erik's script to prep sequence names for BEAST PhyDyn runs
+#I made slight edit to additionally remove "hCoV-19/" from taxon name
 prep_tip_labels_phydyn(file.path(data_dir,'gisaid.March18.alignment.edited.fasta')
    , regexprs = c( '.*/WA/.*', '.*/WA/.*' ) 
 	 , invert_regexpr = c( FALSE, TRUE )
 	 , demes = c( 'Il'  , 'exog'  )
-	 , path_to_save = file.path(data_dir,'outputAlignmentforBEAST.fasta') 
+	 , path_to_save = file.path(data_dir,'edited.alignment.fasta') 
 	)
 ```
 
-###Load the ML tree
 ```{r}
-tr <- read.tree(file.path(data_dir,'gisaid.March18.alignment.edited_RAxML_Tree.newick'))
-length(tr$tip.label)
+#Estimates the average number of pairwise nucleotide differences found in the alignment
+d <- read.dna(file.path(data_dir,'edited.alignment.fasta'), format = 'fasta')
 
-#These next lines edit the tip labels (taxa names) but might be unnecessary given later scripts.
-tr$tip.label <- gsub("hCoV-19/","", tr$tip.label)
-tr$tip.label <- gsub("\\|","_", tr$tip.label)
+raw <- dist.dna( d, model = 'raw' ) 
+hky <- dist.dna( d, model = 'f84' )
+
+.raw <- as.matrix( raw )
+diag(.raw) <- NA 
+print( mean( na.omit(as.vector(  .raw )) ) * 29726 ) 
+#Erik had 29855 here; my alignment is a bit shorter so I use 29726 nucleotides.
+#This will get larger with more sequences as the epidemic progresses, obvs.
+```
+
+
+Loading a RAxML tree from Geneious (from the above alignment)
+```{r}
+tr <- read.tree(file.path(data_dir,'edited.alignment_RAxML_Tree.newick'))
+length(tr$tip.label)
+```
+
+
+###Run RAxML to make an ML tree
+```{r}
+#alignment.raxml.tree <- raxml(d, m = "GTRGAMMA", f = "d", N = 1)
 ```
 
 We use the treedater R package. This takes the following inputs:
@@ -79,22 +79,24 @@ We use the treedater R package. This takes the following inputs:
 
 ### Create the sts vector for treedater
 ```{r sts}
-sts <- sapply( strsplit( tr$tip.label, '_' ), function(x) (x[length(x)] ) )
-sts <- as.Date(sts)
-sts <- decimal_date(sts)
+sts <- sapply( strsplit( tr$tip.label, '\\|' ), function(x) (x[length(x)-1] ) )
+sts <- as.numeric(sts)
+#sts <- decimal_date(sts)
 names(sts) <- tr$tip.label
+
+#"USA/WA-UW52/2020|EPI_ISL_415617|2020-03-09|2020.186|_exog"
 ```
 
 ### Run treedater
 ```{r treedater, message=FALSE}
-td <- dater( tr, sts, s = 29289 , searchRoot = 10, temporalConstraints=TRUE,
-             meanRateLimits = c(.0007, .0015) )
+td <- dater( tr, sts, s = 29726 , searchRoot = 10, temporalConstraints=TRUE,
+             meanRateLimits = c(.0007, .002) )
 ```
 
 Treedater estimated tMRCA (time to most recent common ancestor) is ```365*td$timeToMRCA``` days, and the date of common ancestor as ```date_decimal(td[[4]])```.
 
 ### Plot tree
-Washington sequences tip labels are in red font.
+Washington sequences tip labels are in red font. I need to change this so the names are not on the tips but rather just red and black dots or similar.
 ```{r}
 length(grep("WA", tr$tip.label))
 tipcol <- rep('black', length(tr$tip.label))
@@ -115,19 +117,22 @@ legend("topleft",
        bty='n')
 ```
 
-### Identify outliers
+### Identify and remove outliers (based on strict clock)
 ```{r}
-outliers <- outlierTips( td ) 
-```
+ot0 <- outlierTips( td ) 
+outliers.0 <- subset( ot0[ot0$q<0.01, ] )
 
-```{r eval=FALSE}
-ot0 = outlierTips( td ) 
-
-dd <- read.dna(file.path(data_dir,'gisaid.March18.alignment.edited.fasta'), format = 'fasta')
-toremove <- c( 'Wuhan_HBCDC-HB-01_2019_2019.99452054795_exog', 'USA_CA1_2020_2020.06010928962_exog' )
+dd <- d
+#dd <- read.dna(file.path(data_dir,'gisaid.March18.alignment.edited.fasta'), format = 'fasta')
+toremove <- as.character(outliers.0$taxon)
 dd <- dd[ setdiff( rownames(dd), toremove ), ]
-write.dna(dd,  'algn.21.2.fasta', format = 'fasta' )
+write.dna(dd,  'alignment.no.outliers.fasta', format = 'fasta' )
 ```
+
+
+
+
+
 
 ##BEAST phylodynamic analysis
 
@@ -156,12 +161,7 @@ https://beast.community/online_inference
 
 Trees:
 
-```{r}
-
-library(babette)
-
-#output <- bbt_run(file.path(data_dir,'alignment.March14.fasta'))
-
+```{r eval=FALSE, echo=FALSE}
 alignment.trees <- phytools::as.multiPhylo(file.path(data_dir,'alignment_trees'))
 plot_densitree(
   file.path(data_dir,'alignment_trees'),
