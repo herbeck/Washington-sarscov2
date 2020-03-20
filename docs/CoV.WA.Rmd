@@ -1,7 +1,7 @@
 ---
 title: "Phylodynamic analysis of a COVID19 outbreak in Washington state"
 author: "Josh Herbeck, modified from an original by Erik Volz"
-date: "3/11/2020"
+date: "3/20/2020"
 output: html_document
 ---
 
@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo=TRUE, message=FALSE, warning=FALSE, fig.width=6, fig.height=6)
 ```
 
-This analysis was originally written by Erik Volz (I cloned his https://github.com/emvolz/weifang-sarscov2 repository). I haved edited it so the anlaysis is of the X available WA SARS-CoV-2 sequences (as of date Y), not Weifang SARS-CoV-2 sequences. 
+This analysis was originally written by Erik Volz (I cloned his https://github.com/emvolz/weifang-sarscov2 repository). I have edited it so the anlaysis is of the X available WA SARS-CoV-2 sequences (as of date Y), not Weifang SARS-CoV-2 sequences. 
 
 ## Preliminary phylogenetic analysis
 
