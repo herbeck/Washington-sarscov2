@@ -9,11 +9,9 @@ output: html_document
 knitr::opts_chunk$set(echo=TRUE, message=FALSE, warning=FALSE, fig.width=6, fig.height=6)
 ```
 
-<<<<<<< HEAD
-This analysis was originally written by Erik Volz (I cloned his https://github.com/emvolz/weifang-sarscov2 repository). I haved edited it so the anlaysis is of the 69 available WA SARS-CoV-2 sequences (as of date March 19, 2020), not Weifang SARS-CoV-2 sequences. 
-=======
+
 This analysis was originally written by Erik Volz (I cloned his https://github.com/emvolz/weifang-sarscov2 repository). I have edited it so the anlaysis is of the X available WA SARS-CoV-2 sequences (as of date Y), not Weifang SARS-CoV-2 sequences. 
->>>>>>> bf764d485064ba0ec47d39d3d457e2d349fa9624
+
 
 ## Preliminary phylogenetic analysis
 
