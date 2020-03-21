@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo=TRUE, message=FALSE, warning=FALSE, fig.width=6, fig.height=6)
 ```
 
-This analysis was originally written by Erik Volz (I cloned his https://github.com/emvolz/weifang-sarscov2 repository). I haved edited it so the anlaysis is of the X available WA SARS-CoV-2 sequences (as of date Y), not Weifang SARS-CoV-2 sequences. 
+This analysis was originally written by Erik Volz (I cloned his https://github.com/emvolz/weifang-sarscov2 repository). I haved edited it so the anlaysis is of the 69 available WA SARS-CoV-2 sequences (as of date March 19, 2020), not Weifang SARS-CoV-2 sequences. 
 
 ## Preliminary phylogenetic analysis
 
@@ -18,7 +18,6 @@ This analysis was originally written by Erik Volz (I cloned his https://github.c
 library( ape ) 
 library( lubridate ) 
 library( treedater )
-#library( ips )
 ```
 
 ### Set the data directory and load the data
@@ -26,6 +25,56 @@ library( treedater )
 SARS-CoV-19 genomes are retrieved from: https://gisaid.org/CoV2020 
 
 "Via the Nextstrain genome alignment pipeline, remove the first 130 sites, the last 50 sites, and site 18529 from the alignment."
+
+```{r eval=TRUE, echo=FALSE}
+prep_tip_labels_phydyn <- function( path_to_align, path_to_save = NULL
+                                    , regexprs = c( '.*/WA/.*', '.*/WA/.*' ) 
+                                    , invert_regexpr = c( FALSE, TRUE )
+                                    , demes = c( 'Il'  , 'exog'  )
+){
+
+  if ( inherits( path_to_align, 'DNAbin' ) )
+    d = path_to_align
+  else
+    d = read.dna( path_to_align, format = 'fasta')
+  
+  sids = rownames(d) 
+  if ( length( regexprs ) != length( demes ))
+    stop('Must provide equal numbers of regex and deme names ') 
+  
+  demegroups = lapply( 1:length(demes), function(k) {
+    x = regexprs[k]
+    if ( invert_regexpr[k] ) {
+      return( sids[ !grepl( pattern = x , sids ) ] )
+    }else{
+      return( sids[ grepl( pattern = x , sids ) ] )
+    }
+  })
+  int <- do.call( intersect, demegroups )
+  uni = do.call( c, demegroups )
+  if ( length( int ) > 0 )
+    stop( 'Intersection of deme groups is non-empty. Each regex must match a unique set.' )
+  if ( length( uni ) < length(sids) ){
+    print( setdiff( sids, uni ))
+    stop( 'There were some sequence IDs that did not match a regex. ' )
+  }
+  
+  deme <- setNames( rep(demes[1], nrow(d)), sids )
+  for ( k in 1:length( demes )){
+    deme[ demegroups[[k]] ] <- demes[k]
+  }
+  
+  sts <- sapply( strsplit( rownames(d), '\\|' ) , function(x){
+    round(decimal_date( ymd( tail(x,1))), digits = 3)
+  })
+  rownames(d) <- paste(sep='|', rownames(d), sts, paste0('_', deme) )
+  rownames(d) <- gsub( rownames(d), pattern = '\\s' , replacement = '_')
+  row.names(d) <- gsub( rownames(d), pattern = "hCoV-19/", replacement = '')
+  if ( !is.null( path_to_save ))
+    write.dna( d, file = path_to_save, format = 'fasta' )
+  d
+}
+```
 
 ```{r sequences}
 data_dir <- "~/Dropbox/SARS-CoV-2/data"
